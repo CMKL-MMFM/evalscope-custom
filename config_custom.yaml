@@ -1,0 +1,29 @@
+eval_backend: VLMEvalKit
+eval_config:
+  model: 
+    - type: qwen3-omni
+      name: CustomAPIModel
+      api_base: http://localhost:8801/v1/chat/completions
+      key: EMPTY
+      temperature: 0.0
+      img_size: -1
+
+  data:
+    - SEEDBench_IMG_TH
+    - MMStar_TH
+    - MMBench_DEV_TH
+    - MMT-Bench_VAL_TH
+    - MMT-Bench_VAL
+    - ScienceQA_TEST_TH
+    - MathVerse
+    - MathVista
+    - MathVista_TH
+    - MathVerse_TH
+    - TGAT
+    - MMBench95CI_DEV_TH
+
+# 11
+  mode: all
+  reuse: false
+  work_dir: outputs
+  nproc: 1
