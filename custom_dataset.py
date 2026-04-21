@@ -21,28 +21,42 @@ class CustomDataset:
                 return x.split(",", 1)[1]
             return x
 
-        df["image"] = df["image"].apply(clean_base64)
+        if "image" in df.columns:
+            df["image"] = df["image"].fillna("").apply(clean_base64)
+            # Drop the image column when all values are empty so ImageBaseDataset
+            # skips image_map processing (empty string triggers a broken index lookup)
+            if df["image"].str.strip().eq("").all():
+                df = df.drop(columns=["image"])
         df["index"] = df["index"].astype(str)
 
         return df
 
     def build_prompt(self, line):
-        # Strip prefix from line before parent processes it
-        # because dump_image inside parent reads line['image'] directly
-        if isinstance(line.get('image'), str) and line['image'].startswith("data:image"):
+        image = line.get('image', '')
+
+        # Strip data-URI prefix before parent processes it
+        if isinstance(image, str) and image.startswith("data:image"):
             line = line.copy()
-            line['image'] = line['image'].split(",", 1)[1]
+            line['image'] = image = image.split(",", 1)[1]
+
+        all_keys = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I']
+        choices = [(k, str(line.get(k, '') or '')) for k in all_keys]
+        choices = [(k, v) for k, v in choices if v.strip()]
+        choice_text = ""
+        if choices:
+            choice_text = "\n" + "\n".join(f"{k}. {v}" for k, v in choices)
+            last_key = choices[-1][0]
+            choice_keys = ", ".join(k for k, _ in choices)
+
+        # Text-only dataset — skip dump_image entirely
+        if not image:
+            question = str(line.get('question', ''))
+            suffix = f"\nAnswer with the correct option letter ({choice_keys})." if choices else ""
+            return [{'type': 'text', 'value': question + choice_text + suffix}]
 
         msgs = ImageBaseDataset.build_prompt(self, line)
-
-        # Only append choices when at least one option has text (e.g. TGAT has all-empty choices)
-        choices = [str(line.get(k, '') or '') for k in ['A', 'B', 'C', 'D']]
-        if any(c.strip() for c in choices):
-            choice_text = f"\nA. {choices[0]}\nB. {choices[1]}\nC. {choices[2]}\nD. {choices[3]}"
-            msgs[-1]['value'] += "\n" + choice_text
-
-        msgs[-1]['value'] += "\nAnswer with A, B, C, or D only."
-
+        suffix = f"\nAnswer with the correct option letter ({choice_keys})." if choices else ""
+        msgs[-1]['value'] += choice_text + suffix
         return msgs
 
     def evaluate(self, eval_file, **judge_kwargs):

@@ -2,11 +2,11 @@
 summary_report.py
 -----------------
 Scan a VLMEvalKit output run and produce a CSV summary:
-    dataset_name, overall_accuracy, questions_answered, questions_total
+    dataset_name, overall_accuracy, questions_formatted, questions_total
 
 For datasets that failed evaluation (no _acc.csv produced), overall_accuracy
-is left empty. questions_answered comes from the model result xlsx;
-questions_total comes from the formatted TSV in LMUData_formated/.
+is left empty. questions_formatted counts rows in the formatted TSV in
+LMUData_formated/. questions_total counts rows in the original TSV in LMUData/.
 
 Usage:
     python summary_report.py                        # latest run
@@ -20,6 +20,7 @@ import sys
 
 OUTPUTS_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "outputs")
 LMUDATA_FMT  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData_formated")
+LMUDATA_ORIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData")
 
 
 def get_overall(acc_csv_path: str) -> str:
@@ -36,32 +37,40 @@ def get_overall(acc_csv_path: str) -> str:
     return ""
 
 
-def count_answered(xlsx_path: str) -> int:
-    """Count rows in the result xlsx where prediction is non-empty."""
-    try:
-        import pandas as pd
-        df = pd.read_excel(xlsx_path, dtype=str)
-        if "prediction" not in df.columns:
-            return len(df)
-        return int(df["prediction"].notna().sum())
-    except Exception:
-        return 0
-
-
-def count_total(dataset_name: str) -> int:
-    """Count rows in the formatted TSV for this dataset."""
-    tsv_path = os.path.join(LMUDATA_FMT, dataset_name + ".tsv")
-    if not os.path.isfile(tsv_path):
-        # fallback: try the _TH variant (Thai-translated datasets)
-        tsv_path = os.path.join(LMUDATA_FMT, dataset_name + "_TH.tsv")
-    if not os.path.isfile(tsv_path):
-        return 0
+def _count_tsv_rows(tsv_path: str) -> int:
+    """Count data rows in a TSV file (subtract 1 for header)."""
     try:
         with open(tsv_path, encoding="utf-8") as f:
-            # subtract 1 for header
             return sum(1 for _ in f) - 1
     except Exception:
         return 0
+
+
+def count_formatted(dataset_name: str) -> int:
+    """Count rows in the formatted TSV (LMUData_formated/) for this dataset."""
+    for candidate in (dataset_name + ".tsv", dataset_name + "_TH.tsv"):
+        p = os.path.join(LMUDATA_FMT, candidate)
+        if os.path.isfile(p):
+            return _count_tsv_rows(p)
+    return 0
+
+
+def count_total(dataset_name: str) -> int:
+    """Count rows in the original TSV (LMUData/) for this dataset.
+
+    Uses pandas instead of line counting because the original files contain
+    base64 images with embedded newlines, which inflate a naive line count.
+    """
+    import pandas as pd
+    for candidate in (dataset_name + ".tsv", dataset_name + "_TH.tsv"):
+        p = os.path.join(LMUDATA_ORIG, candidate)
+        if os.path.isfile(p):
+            try:
+                df = pd.read_csv(p, sep="\t", dtype=str, on_bad_lines="skip", usecols=[0])
+                return len(df)
+            except Exception:
+                return 0
+    return 0
 
 
 def extract_dataset_name(filename: str, model_prefix: str) -> str:
@@ -117,10 +126,10 @@ def collect_datasets(run_dir: str) -> dict:
 
             all_ds = set(xlsx_files) | set(acc_files)
             for ds in all_ds:
-                accuracy = get_overall(acc_files[ds]) if ds in acc_files else ""
-                answered = count_answered(xlsx_files[ds]) if ds in xlsx_files else 0
-                total    = count_total(ds)
-                results[ds] = {"accuracy": accuracy, "answered": answered, "total": total}
+                accuracy  = get_overall(acc_files[ds]) if ds in acc_files else ""
+                formatted = count_formatted(ds)
+                total     = count_total(ds)
+                results[ds] = {"accuracy": accuracy, "formatted": formatted, "total": total}
 
     return results
 
@@ -129,21 +138,21 @@ def write_summary(results: dict, output_path: str):
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow(["dataset_name", "overall_accuracy", "questions_answered", "questions_total"])
+        writer.writerow(["dataset_name", "overall_accuracy", "questions_formatted", "questions_total"])
         for ds in sorted(results):
             r = results[ds]
-            writer.writerow([ds, r["accuracy"], r["answered"] or "", r["total"] or ""])
+            writer.writerow([ds, r["accuracy"], r["formatted"] or "", r["total"] or ""])
     print(f"Summary written → {output_path}")
 
     # Console table
-    print(f"\n{'dataset_name':<35} {'accuracy':<12} {'answered':>10} {'total':>8}")
-    print("-" * 70)
+    print(f"\n{'dataset_name':<35} {'accuracy':<12} {'formatted':>12} {'total':>8}")
+    print("-" * 72)
     for ds in sorted(results):
         r = results[ds]
-        acc      = r["accuracy"] if r["accuracy"] else "ERROR"
-        answered = str(r["answered"]) if r["answered"] else "-"
-        total    = str(r["total"])    if r["total"]    else "-"
-        print(f"{ds:<35} {acc:<12} {answered:>10} {total:>8}")
+        acc       = r["accuracy"]  if r["accuracy"]  else "ERROR"
+        formatted = str(r["formatted"]) if r["formatted"] else "-"
+        total     = str(r["total"])     if r["total"]     else "-"
+        print(f"{ds:<35} {acc:<12} {formatted:>12} {total:>8}")
 
 
 def process_run(run_id: str):

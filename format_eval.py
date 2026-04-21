@@ -4,7 +4,7 @@ format_eval.py
 Convert raw datasets in LMUData/ → evalscope-compatible TSV files in LMUData_formated/
 
 Output columns (required by CustomVQADataset / VLMEvalKit):
-    index | question | A | B | C | D | answer | image
+    index | question | A | B | C | D | E | F | G | H | I | answer | image
 
 Dataset notes
 ─────────────
@@ -42,14 +42,21 @@ import pandas as pd
 
 LMUDATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData")
 OUTPUT_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData_formated")
-STANDARD_HEADER = "index\tquestion\tA\tB\tC\tD\tanswer\timage\n"
-LETTERS = ["A", "B", "C", "D"]
+STANDARD_HEADER = "index\tquestion\tA\tB\tC\tD\tE\tF\tG\tH\tI\tanswer\timage\n"
+LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
 
 # pandas C parser has a ~1 MB per-line limit; keep images well under that.
 # 400 KB image → ~533 K base64 chars → safe with surrounding text.
 MAX_B64_CHARS = 400_000
 IMG_MAX_DIM   = 768   # resize longest edge to this before re-encoding
 IMG_QUALITY   = 82    # JPEG quality
+
+# 1×1 white JPEG placeholder for text-only datasets.
+# VLMEvalKit's ImageBaseDataset treats any image string with len<=64 as an
+# index reference and raises AssertionError on empty strings.  Providing a
+# real (tiny) base64 image avoids that crash for text-only MCQ datasets.
+# Generated with: Image.new('RGB',(1,1),(255,255,255)) saved as JPEG quality=1
+BLANK_IMAGE_B64 = "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwCSiiigD//Z"  # noqa: E501
 
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
@@ -134,8 +141,8 @@ def parse_choices_from_query_wo(query_wo: str) -> dict:
     result = {}
     for line in match.group(1).strip().splitlines():
         line = line.strip()
-        # Match Latin A-D or Thai ก-ง, followed by : or ：
-        m = re.match(r'^([A-Dก-ง])\s*[:：]\s*(.+)$', line)
+        # Match Latin A-I or Thai ก-ง, followed by : or ：
+        m = re.match(r'^([A-Iก-ง])\s*[:：]\s*(.+)$', line)
         if m:
             key = m.group(1)
             key = THAI_TO_LATIN.get(key, key)  # normalise Thai → Latin
@@ -144,8 +151,8 @@ def parse_choices_from_query_wo(query_wo: str) -> dict:
 
 
 def answer_to_letter(raw) -> str:
-    """Return 'A'/'B'/'C'/'D' from int index, Latin letter, or Thai letter."""
-    if isinstance(raw, int) and 0 <= raw < 4:
+    """Return 'A'–'I' from int index, Latin letter, or Thai letter."""
+    if isinstance(raw, int) and 0 <= raw < len(LETTERS):
         return LETTERS[raw]
     s = str(raw).strip()
     if s in THAI_TO_LATIN:
@@ -175,7 +182,9 @@ def write_rows(rows, output_path, extra_cols: list[str] | None = None):
             new_img = new_img.replace("\n", "").replace("\r", "").replace("\t", "")
             line = (
                 f"{r['index']}\t{r['question']}\t{r['A']}\t{r['B']}\t"
-                f"{r['C']}\t{r['D']}\t{r['answer']}\t{new_img}"
+                f"{r['C']}\t{r['D']}\t{r.get('E','')}\t{r.get('F','')}\t"
+                f"{r.get('G','')}\t{r.get('H','')}\t{r.get('I','')}\t"
+                f"{r['answer']}\t{new_img}"
             )
             for col in extra_cols:
                 line += "\t" + clean(r.get(col, ""))
@@ -184,6 +193,21 @@ def write_rows(rows, output_path, extra_cols: list[str] | None = None):
     if compressed:
         print(f"  🗜️   Compressed {compressed} oversized images")
     print(f"  ✅  {len(rows)} rows → {output_path}")
+
+
+def _patch_datasets_list_type():
+    """
+    Older cached Arrow/Parquet files embed "_type": "List" in their schema
+    metadata, but newer versions of `datasets` renamed it to "Sequence".
+    Patch the registry once so all load_dataset() calls work without
+    re-downloading.
+    """
+    try:
+        from datasets.features import features as _dsf
+        if "List" not in _dsf._FEATURE_TYPES:
+            _dsf._FEATURE_TYPES["List"] = _dsf._FEATURE_TYPES["Sequence"]
+    except Exception:
+        pass
 
 
 # ── Per-dataset formatters (read from LMUData TSV) ────────────────────────────
@@ -389,7 +413,7 @@ def fmt_mathvista_hf(output_path: str):
     - choices is a Python list, answer is the text → match to A/B/C/D
     """
     from datasets import load_dataset
-
+    _patch_datasets_list_type()
     print("  Loading AI4Math/MathVista from HuggingFace (split=testmini)...")
     ds = load_dataset("AI4Math/MathVista", split="testmini")
 
@@ -457,7 +481,7 @@ def fmt_mathverse_hf(output_path: str):
     - image is a PIL Image → convert to base64
     """
     from datasets import load_dataset
-
+    _patch_datasets_list_type()
     print("  Loading AI4Math/MathVerse from HuggingFace (config=testmini)...")
     ds = load_dataset("AI4Math/MathVerse", "testmini", split="testmini")
 
@@ -507,17 +531,19 @@ def fmt_tgat_hf(output_path: str):
     CMKL/TGAT (Thai General Aptitude Test):
     - Loads from HuggingFace (split=train)
     - image is a PIL Image → convert to base64
-    - Filter answer_type == "single" (skip multi / soft)
+    - Filter answer_type == "single" only (skip multi / soft)
     - answers is a dict {letter: score}; 1.0 = correct
-    - Skip rows where the correct answer is E (only A–D supported)
+    - Supports answers A–E (5-option questions)
     - No question text; question is embedded in the image
     """
     from datasets import load_dataset
-
+    _patch_datasets_list_type()
     print("  Loading CMKL/TGAT from HuggingFace...")
     ds = load_dataset("CMKL/TGAT", split="train")
 
-    q_gen = "โปรดตอบคำถามโดยตรงและระบุตัวเลือกที่ถูกต้องเป็นตัวอักษร เช่น A, B, C, D"
+    q_gen = "โปรดตอบคำถามโดยตรงและระบุตัวเลือกที่ถูกต้องเป็นตัวอักษร เช่น A, B, C, D หรือ E เท่านั้น"
+
+    _TGAT_LETTERS = ["A", "B", "C", "D", "E"]
 
     rows = []
     skipped = 0
@@ -535,7 +561,7 @@ def fmt_tgat_hf(output_path: str):
                     break
             except (TypeError, ValueError):
                 pass
-        if letter is None or letter not in LETTERS:
+        if letter is None or letter not in _TGAT_LETTERS:
             skipped += 1
             continue
 
@@ -552,16 +578,22 @@ def fmt_tgat_hf(output_path: str):
         rows.append({
             "index":   item.get("id", idx),
             "question": q_gen,
-            "A":        "",
-            "B":        "",
-            "C":        "",
-            "D":        "",
+            # Choices are embedded in the image; use the letter itself as a
+            # non-empty placeholder so VLMEvalKit's build_choices() sees valid
+            # option keys and can_infer() can match the model's single-letter
+            # prediction (pandas reads empty TSV fields as NaN, which causes
+            # build_choices to return {} and every prediction to score 0).
+            "A":        "A",
+            "B":        "B",
+            "C":        "C",
+            "D":        "D",
+            "E":        "E",
             "answer":   letter,
             "image":    img_b64,
         })
 
     if skipped:
-        print(f"    ⚠️  Skipped {skipped} non-single or answer-E rows")
+        print(f"    ⚠️  Skipped {skipped} non-single or out-of-range rows")
     write_rows(rows, output_path)
 
 
@@ -571,6 +603,73 @@ def fmt_tgat_hf(output_path: str):
 
 _Q_MMT_TH = "โปรดเลือกคำตอบที่ดีที่สุดจาก Choice A, B, C, D"
 _Q_MMT_EN = "Please choose the best answer from Choices A, B, C, and D."
+
+def fmt_m3exam(df: pd.DataFrame) -> list:
+    """
+    chiayewken/m3exam (thai config):
+    columns: question_text, options (Python list str), answer_text (1-indexed int as str)
+    No image column — leaves image empty.
+    """
+    rows = []
+    skipped = 0
+    for idx, row in enumerate(df.itertuples(index=False), 1):
+        choices = parse_choices_list(row.options)
+        # Strip leading "1. ", "2. " numbering if present
+        cleaned = []
+        for c in choices:
+            c = re.sub(r'^\d+\.\s*', '', c.strip())
+            cleaned.append(c)
+        while len(cleaned) < 4:
+            cleaned.append("")
+        try:
+            answer_idx = int(str(row.answer_text).strip()) - 1  # 1-indexed → 0-indexed
+            letter = LETTERS[answer_idx]
+        except (ValueError, IndexError):
+            skipped += 1
+            continue
+        rows.append({
+            "index":   idx,
+            "question": clean(row.question_text),
+            "A":        clean(cleaned[0]),
+            "B":        clean(cleaned[1]),
+            "C":        clean(cleaned[2]),
+            "D":        clean(cleaned[3]),
+            "answer":   letter,
+            "image":    BLANK_IMAGE_B64,
+        })
+    if skipped:
+        print(f"    ⚠️  Skipped {skipped} rows with unparseable answer")
+    return rows
+
+
+def fmt_thai_exam(df: pd.DataFrame) -> list:
+    """
+    typhoon-ai/thai_exam (a_level config):
+    columns: question, a, b, c, d, e, answer (letter a-e), subject
+    Has 5 options; skip rows where answer == 'e' (only A-D supported).
+    No image column — leaves image empty.
+    """
+    rows = []
+    skipped = 0
+    for idx, row in enumerate(df.itertuples(index=False), 1):
+        answer = str(row.answer).strip().upper()
+        if answer not in LETTERS:
+            skipped += 1
+            continue
+        rows.append({
+            "index":   idx,
+            "question": clean(row.question),
+            "A":        clean(row.a),
+            "B":        clean(row.b),
+            "C":        clean(row.c),
+            "D":        clean(row.d),
+            "answer":   answer,
+            "image":    BLANK_IMAGE_B64,
+        })
+    if skipped:
+        print(f"    ⚠️  Skipped {skipped} rows with answer outside A-D (e.g. E)")
+    return rows
+
 
 TSV_CONFIGS = [
     ("SEEDBench_IMG_TH.tsv",   fmt_standard_abcd),
@@ -582,6 +681,8 @@ TSV_CONFIGS = [
     ("ScienceQA_TEST_TH.tsv",  fmt_sciqa),
     ("MathVista_TH.tsv",       fmt_mathvista_th),
     ("MathVerse_TH.tsv",       fmt_mathverse_th),
+    ("m3exam.tsv",             fmt_m3exam),
+    ("thai_exam.tsv",          fmt_thai_exam),
 ]
 
 HF_CONFIGS = [

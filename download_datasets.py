@@ -11,20 +11,23 @@ import csv
 # Each entry is either a plain "ORG/NAME" string (no config needed)
 # or a tuple ("ORG/NAME", "config_name") for datasets that require one.
 DATASETS = [
-    # "CMKL/SEEDBench_IMG_TH",
-    # "CMKL/ScienceQA_TEST_TH",
-    # "CMKL/MMStar_TH",
-    # "CMKL/MMT-Bench_VAL_TH",
-    # "CMKL/MMBench_DEV_TH",
-    # "CMKL/MathVerse_TH",
-    # "CMKL/MathVista_TH",
+    "CMKL/SEEDBench_IMG_TH",
+    "CMKL/ScienceQA_TEST_TH",
+    "CMKL/MMStar_TH",
+    "CMKL/MMT-Bench_VAL_TH",
+    "CMKL/MMBench_DEV_TH",
+    "CMKL/MathVerse_TH",
+    "CMKL/MathVista_TH",
 
-    # "OpenGVLab/MMT-Bench", using only MMT-Bench_VAL.tsv
-    # "AI4Math/MathVista",
+    "OpenGVLab/MMT-Bench", # using only MMT-Bench_VAL.tsv
+    "AI4Math/MathVista",
     ("AI4Math/MathVerse", "testmini"),
 
-    # "CMKL/TGAT",
-    # "CMKL/MMBench95CI_DEV_TH"
+    "CMKL/TGAT",
+    "CMKL/MMBench95CI_DEV_TH"
+
+    # ("chiayewken/m3exam", "thai"),
+    # ("typhoon-ai/thai_exam", "a_level")
 ]
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -47,11 +50,12 @@ def download_and_save(dataset_id: str, output_dir: str, config: str = None) -> N
     print(f"[{dataset_id}] Loading from HuggingFace...")
     ds = load_dataset(dataset_id, config) if config else load_dataset(dataset_id)
 
-    # Use the first available split (usually 'train' or 'test')
-    split_name = list(ds.keys())[0]
-    split = ds[split_name]
+    # Concatenate all splits so no rows are lost
+    from datasets import concatenate_datasets
+    available = list(ds.keys())
+    split = concatenate_datasets([ds[s] for s in available])
 
-    print(f"[{dataset_id}] Saving split '{split_name}' → {output_path}")
+    print(f"[{dataset_id}] Saving all splits {available} → {output_path}")
     os.makedirs(output_dir, exist_ok=True)
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
