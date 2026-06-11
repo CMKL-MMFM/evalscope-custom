@@ -6,7 +6,7 @@ from evalscope.run import run_task
 import summary_report
 
 # ── Copy formatted datasets to ~/LMUData (where VLMEvalKit looks for them) ───
-src = os.path.join(os.path.dirname(__file__), "LMUData_formated")
+src = os.path.join(os.path.dirname(__file__), "LMUData_formatted")
 dst = os.path.expanduser("~/LMUData")
 
 if os.path.exists(dst):
@@ -15,7 +15,7 @@ shutil.copytree(src, dst)
 print(f"Copied {src} → {dst}")
 
 # ── Run evaluation ────────────────────────────────────────────────────────────
-run_task(task_cfg=os.path.join(os.path.dirname(__file__), "config_custom.yaml"))
+run_task(task_cfg=os.path.join(os.path.dirname(__file__), "configs", "custom.yaml"))
 
 # ── Auto-generate summary report ─────────────────────────────────────────────
 run_id = summary_report.latest_run_id()

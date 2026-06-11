@@ -1,7 +1,7 @@
 """
 format_eval.py
 --------------
-Convert raw datasets in LMUData/ → evalscope-compatible TSV files in LMUData_formated/
+Convert raw datasets in LMUData/ → evalscope-compatible TSV files in LMUData_formatted/
 
 Output columns (required by CustomVQADataset / VLMEvalKit):
     index | question | A | B | C | D | E | F | G | H | I | answer | image
@@ -41,7 +41,7 @@ import base64
 import pandas as pd
 
 LMUDATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData")
-OUTPUT_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData_formated")
+OUTPUT_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData_formatted")
 STANDARD_HEADER = "index\tquestion\tA\tB\tC\tD\tE\tF\tG\tH\tI\tanswer\timage\n"
 LETTERS = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
 
@@ -273,6 +273,9 @@ def fmt_mmbench95ci(df: pd.DataFrame) -> list:
     return rows
 
 
+_ABCD = ("A", "B", "C", "D")
+
+
 def fmt_mmtbench(df: pd.DataFrame, question_generated: str = "") -> list:
     """
     MMT-Bench_VAL_TH / MMT-Bench_VAL:
@@ -286,7 +289,7 @@ def fmt_mmtbench(df: pd.DataFrame, question_generated: str = "") -> list:
     skipped = 0
     for idx, row in enumerate(df.itertuples(index=False), 1):
         letter = answer_to_letter(row.answer)
-        if letter not in LETTERS:
+        if letter not in _ABCD:
             skipped += 1
             continue
         original_question = clean(row.question)
@@ -646,14 +649,14 @@ def fmt_thai_exam(df: pd.DataFrame) -> list:
     """
     typhoon-ai/thai_exam (a_level config):
     columns: question, a, b, c, d, e, answer (letter a-e), subject
-    Has 5 options; skip rows where answer == 'e' (only A-D supported).
+    Has 5 options; skip rows where answer == 'E' (only A-D supported).
     No image column — leaves image empty.
     """
     rows = []
     skipped = 0
     for idx, row in enumerate(df.itertuples(index=False), 1):
         answer = str(row.answer).strip().upper()
-        if answer not in LETTERS:
+        if answer not in _ABCD:
             skipped += 1
             continue
         rows.append({

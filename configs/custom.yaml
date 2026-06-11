@@ -21,10 +21,7 @@ eval_config:
     - MathVerse_TH
     - TGAT
     - MMBench95CI_DEV_TH
-    # - m3exam
-    # - thai_exam
 
-# 11
   mode: all
   # limit: 100
   reuse: false

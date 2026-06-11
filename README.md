@@ -1,14 +1,123 @@
 # evalscope-custom
 
-Evaluation pipeline for Vision-Language Models (VLMs) using [evalscope](https://github.com/modelscope/evalscope) / VLMEvalKit with Thai and custom datasets.
+Evaluation pipeline for Vision-Language Models (VLMs) using [VLMEvalKit](https://github.com/modelscope/evalscope) with Thai and custom datasets.
 
 This repository includes custom Thai benchmark datasets and scripts to reproduce evaluation results from our paper.
 
 ---
 
-## Datasets
+## Quick Start
 
-This pipeline evaluates on the following datasets.
+```bash
+# 1. Install dependencies
+pip install -r requirements.txt
+
+# 2. Serve the model (see Step 0 below)
+
+# 3. Download and format Thai/custom datasets
+python download_datasets.py
+python format_eval.py
+
+# 4. Run evaluation
+python run_eval.py           # standard benchmarks
+python run_eval_custom.py    # Thai / custom benchmarks
+
+# 5. View results
+python summary_report.py     # latest run
+python summary_report.py --all  # all runs
+```
+
+---
+
+## Steps
+
+### 0. Serve the model
+
+Start the model server before running evaluation. Default model: **[CMKL/MANGO-Qwen3-Omni-30B-A3B-Instruct](https://huggingface.co/CMKL/MANGO-Qwen3-Omni-30B-A3B-Instruct)**
+
+```bash
+python -m vllm.entrypoints.openai.api_server \
+  --model CMKL/MANGO-Qwen3-Omni-30B-A3B-Instruct \
+  --served-model-name qwen3-omni \
+  --port 8801 \
+  --trust-remote-code \
+  --dtype float16 \
+  --tensor-parallel-size 2 \
+  --gpu-memory-utilization 0.85 \
+  --max-model-len 4096 \
+  --max-num-seqs 4
+```
+
+To use a different model, update `--served-model-name` and the `type` field in the config files under `configs/`.
+
+---
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+---
+
+### 2. Download datasets
+
+```bash
+python download_datasets.py
+```
+
+Downloads Thai/custom datasets from HuggingFace and saves them as `.tsv` files into `LMUData/`.
+To add or remove datasets, edit the `DATASETS` list at the top of `download_datasets.py`.
+
+> Standard benchmarks (`MMStar`, `SEEDBench_IMG`, etc.) are downloaded automatically by VLMEvalKit during evaluation.
+
+---
+
+### 3. Format datasets
+
+```bash
+python format_eval.py                              # all datasets
+python format_eval.py MMStar_TH ScienceQA_TEST_TH  # specific datasets only
+```
+
+Converts raw TSV files from `LMUData/` into evalscope-compatible format and saves them to `LMUData_formatted/`.
+Normalizes columns to `index | question | A–I | answer | image` and filters to multiple-choice questions only.
+
+Some datasets (`MathVista`, `MathVerse`, `TGAT`) are loaded directly from HuggingFace during this step because their images require PIL decoding.
+
+---
+
+### 4. Run evaluation
+
+**Standard benchmarks** (auto-downloaded by VLMEvalKit):
+```bash
+python run_eval.py
+```
+Uses `configs/standard.yaml`. Edit the `data` list in that file to select which benchmarks to run.
+
+**Thai / custom benchmarks** (from `LMUData_formatted/`):
+```bash
+python run_eval_custom.py
+```
+Uses `configs/custom.yaml`. This script copies `LMUData_formatted/` → `~/LMUData` so VLMEvalKit can locate the files, then starts evaluation.
+
+Results are saved to `outputs/` and a summary CSV is auto-generated after each run.
+
+---
+
+### 5. View results
+
+Results are saved under `outputs/<timestamp>/`. A per-dataset accuracy CSV is auto-generated at the end of each run.
+
+To regenerate the summary manually:
+```bash
+python summary_report.py          # latest run only
+python summary_report.py --all    # all runs in outputs/
+```
+
+---
+
+## Datasets
 
 **Standard benchmarks** (auto-downloaded by VLMEvalKit):
 
@@ -19,7 +128,7 @@ This pipeline evaluates on the following datasets.
 | `MMBench_DEV_EN` | MMBench English dev set |
 | `ScienceQA_TEST` | Science QA test set |
 
-**Thai / custom benchmarks** (downloaded and formatted by this repo):
+**Thai / custom benchmarks** (downloaded and formatted manually):
 
 | Dataset | Description | Dataset Card |
 |---------|-------------|--------------|
@@ -37,137 +146,59 @@ This pipeline evaluates on the following datasets.
 
 ---
 
-## Prerequisites
-
-- Python 3.10+
-- A running vLLM-served model endpoint (see [Step 0](#0-serve-the-model))
-- HuggingFace access (public datasets, no token required)
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Steps
-
-### 0. Serve the model
-
-Start the model server before running evaluation. Example commands for supported models are in `serve_qwen3.txt` and `serve_qwen2.5.txt`.
-
-**Qwen3-Omni (default):**
-```bash
-python -m vllm.entrypoints.openai.api_server \
-  --model cyankiwi/Qwen3-Omni-30B-A3B-Instruct-AWQ-4bit \
-  --served-model-name qwen3-omni \
-  --port 8801 \
-  --trust-remote-code \
-  --dtype float16 \
-  --tensor-parallel-size 2
-```
-
-Update `api_base` in `config_custom.yaml` or `config_template.yaml` if you use a different port or model.
-
----
-
-### 1. Download datasets
-
-```bash
-python download_datasets.py
-```
-
-Downloads Thai/custom datasets from HuggingFace and saves them as `.tsv` files into `LMUData/`.
-To add or remove datasets, edit the `DATASETS` list at the top of `download_datasets.py`.
-
-> Standard benchmarks (`MMStar`, `SEEDBench_IMG`, etc.) are downloaded automatically by VLMEvalKit during evaluation — you do not need to download them here.
-
----
-
-### 2. Format datasets
-
-```bash
-python format_eval.py                              # all datasets
-python format_eval.py MMStar_TH ScienceQA_TEST_TH  # specific datasets only
-```
-
-Converts raw TSV files from `LMUData/` into evalscope-compatible format and saves them to `LMUData_formated/`.
-This step normalizes columns to `index | question | A–I | answer | image` and filters to multiple-choice questions only.
-
-Some datasets (`MathVista`, `MathVerse`, `TGAT`) are loaded directly from HuggingFace during this step because their images require PIL decoding.
-
----
-
-### 3. Run evaluation
-
-**Standard benchmarks** (auto-downloaded by VLMEvalKit):
-```bash
-python run_eval.py
-```
-Uses `config_template.yaml`. Edit the `data` list in that file to select which benchmarks to run.
-
-**Thai / custom benchmarks** (from `LMUData_formated/`):
-```bash
-python run_eval_custom.py
-```
-Uses `config_custom.yaml`. This script copies `LMUData_formated/` → `~/LMUData` so VLMEvalKit can locate the files, then starts evaluation.
-
-Results are saved to `outputs/` and a summary CSV is auto-generated after each run.
-
----
-
-### 4. View results
-
-Results are saved under `outputs/<timestamp>/`. A per-dataset accuracy CSV is auto-generated at the end of each run.
-
-To regenerate the summary manually:
-```bash
-python summary_report.py          # latest run only
-python summary_report.py --all    # all runs in outputs/
-```
-
----
-
 ## Configuration
 
-Edit the YAML config files to change the model endpoint or dataset list before running.
+Edit the YAML files in `configs/` to change the model endpoint or dataset list.
 
-**`config_template.yaml`** — used by `run_eval.py` (standard benchmarks):
+**`configs/standard.yaml`** — used by `run_eval.py` (standard benchmarks):
 ```yaml
 eval_backend: VLMEvalKit
 eval_config:
   model:
     - type: qwen3-omni
       name: CustomAPIModel
-      api_base: http://localhost:8801/v1/chat/completions  # change this if needed
+      api_base: http://localhost:8801/v1/chat/completions
       key: EMPTY
       temperature: 0.0
   data:
     - MMStar
     - SEEDBench_IMG
-    # add or remove datasets here
+    - MMBench_DEV_EN
+    - ScienceQA_TEST
 ```
 
-**`config_custom.yaml`** — used by `run_eval_custom.py` (Thai / custom benchmarks): same format.
+**`configs/custom.yaml`** — used by `run_eval_custom.py` (Thai / custom benchmarks): same format with Thai dataset names.
+
+> `type` must match the `--served-model-name` used when starting the vLLM server.
+
+---
+
+## Prerequisites
+
+- Python 3.10+
+- A running vLLM-served model endpoint (see [Step 0](#0-serve-the-model))
+- HuggingFace access (public datasets, no token required)
 
 ---
 
 ## File Overview
 
-| File | Description |
-|------|-------------|
-| `download_datasets.py` | Downloads datasets from HuggingFace → `LMUData/` |
-| `format_eval.py` | Formats `LMUData/` → evalscope-compatible TSV in `LMUData_formated/` |
-| `run_eval.py` | Runs evaluation on standard benchmarks using `config_template.yaml` |
-| `run_eval_custom.py` | Runs evaluation on Thai/custom benchmarks using `config_custom.yaml` |
-| `custom_dataset.py` | Patches VLMEvalKit to load custom TSV datasets |
-| `summary_report.py` | Generates accuracy summary CSV from `outputs/` |
-| `config_template.yaml` | Config for standard benchmark evaluation |
-| `config_custom.yaml` | Config for Thai/custom benchmark evaluation |
-| `serve_qwen2.5.txt` | vLLM serve command for Qwen2.5 |
-| `serve_qwen3.txt` | vLLM serve command for Qwen3-Omni |
-| `LMUData/` | Raw downloaded datasets (TSV) |
-| `LMUData_formated/` | Formatted datasets ready for evaluation |
-| `outputs/` | Evaluation results per run (named by timestamp) |
-| `docs/` | Dataset documentation |
+```
+evalscope-custom/
+├── configs/
+│   ├── standard.yaml       # Config for standard benchmark evaluation
+│   └── custom.yaml         # Config for Thai/custom benchmark evaluation
+├── docs/
+│   ├── MMBench95CI_README.md
+│   └── TGAT_README.md
+├── LMUData/                # Raw downloaded datasets (TSV)
+├── LMUData_formatted/      # Formatted datasets ready for evaluation
+├── outputs/                # Evaluation results per run (named by timestamp)
+├── custom_dataset.py       # Patches VLMEvalKit to load custom TSV datasets
+├── download_datasets.py    # Downloads datasets from HuggingFace → LMUData/
+├── format_eval.py          # Formats LMUData/ → evalscope-compatible TSV
+├── run_eval.py             # Runs evaluation on standard benchmarks
+├── run_eval_custom.py      # Runs evaluation on Thai/custom benchmarks
+├── summary_report.py       # Generates accuracy summary CSV from outputs/
+└── requirements.txt
+```

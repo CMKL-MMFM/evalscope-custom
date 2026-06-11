@@ -25,9 +25,6 @@ DATASETS = [
 
     "CMKL/TGAT",
     "CMKL/MMBench95CI_DEV_TH"
-
-    # ("chiayewken/m3exam", "thai"),
-    # ("typhoon-ai/thai_exam", "a_level")
 ]
 # ────────────────────────────────────────────────────────────────────────────
 

@@ -1,13 +1,5 @@
 python -m vllm.entrypoints.openai.api_server \
-  --model cyankiwi/Qwen3-Omni-30B-A3B-Instruct-AWQ-4bit \
-  --served-model-name qwen3-omni \
-  --port 8801 \
-  --trust-remote-code \
-  --dtype auto \
-  --tensor-parallel-size 2
-
-python -m vllm.entrypoints.openai.api_server \
-  --model cyankiwi/Qwen3-Omni-30B-A3B-Instruct-AWQ-4bit \
+  --model CMKL/MANGO-Qwen3-Omni-30B-A3B-Instruct \
   --served-model-name qwen3-omni \
   --port 8801 \
   --trust-remote-code \

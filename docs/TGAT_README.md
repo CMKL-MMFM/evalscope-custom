@@ -2,7 +2,7 @@
 
 **HuggingFace:** [CMKL/TGAT](https://huggingface.co/datasets/CMKL/TGAT)
 
-A visual multiple-choice benchmark based on the Thai General Aptitude Test (TGAT), a standardized university entrance exam in Thailand. This dataset evaluates reasoning, spatial understanding, and general aptitude through image-based questions.
+A visual multiple-choice benchmark based on the Thai General Aptitude Test (TGAT), a standardized university entrance exam in Thailand. This dataset evaluates reasoning, spatial understanding, and general aptitude through image-based questions. The dataset covers the **2024–2025** academic year.
 
 ---
 
@@ -11,6 +11,7 @@ A visual multiple-choice benchmark based on the Thai General Aptitude Test (TGAT
 | Property | Value |
 |----------|-------|
 | Language | Thai |
+| Years covered | 2024–2025 |
 | Question type | Multiple-choice (5 options: A–E) |
 | Modality | Image (question text embedded in image) |
 | Answer type | Single correct answer |
@@ -44,7 +45,7 @@ Only `answer_type == "single"` items are used in evaluation.
 3. Converts each PIL image to a compressed JPEG base64 string.
 4. Sets choice columns (`A`–`E`) to their letter labels as placeholders (choices are embedded in the image, not text fields).
 5. Extracts the correct letter from the `answers` dict (the key with score `1.0`).
-6. Outputs `LMUData_formated/TGAT.tsv`.
+6. Outputs `LMUData_formatted/TGAT.tsv`.
 
 The model is prompted in Thai:
 > "โปรดตอบคำถามโดยตรงและระบุตัวเลือกที่ถูกต้องเป็นตัวอักษร เช่น A, B, C, D หรือ E เท่านั้น"

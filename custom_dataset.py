@@ -68,7 +68,7 @@ class CustomDataset:
         data['prediction'] = [str(x) for x in data['prediction']]
         data['answer'] = [str(x) for x in data['answer']]
 
-        result = np.mean(data['answer'] == data['prediction'])
+        result = np.mean(data['answer'] == data['prediction']) * 100
         ret = {'Overall': result}
         ret = d2df(ret).round(2)
 

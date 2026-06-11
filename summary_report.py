@@ -6,7 +6,7 @@ Scan a VLMEvalKit output run and produce a CSV summary:
 
 For datasets that failed evaluation (no _acc.csv produced), overall_accuracy
 is left empty. questions_formatted counts rows in the formatted TSV in
-LMUData_formated/. questions_total counts rows in the original TSV in LMUData/.
+LMUData_formatted/. questions_total counts rows in the original TSV in LMUData/.
 
 Usage:
     python summary_report.py                        # latest run
@@ -19,7 +19,7 @@ import os
 import sys
 
 OUTPUTS_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "outputs")
-LMUDATA_FMT  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData_formated")
+LMUDATA_FMT  = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData_formatted")
 LMUDATA_ORIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LMUData")
 
 
@@ -47,7 +47,7 @@ def _count_tsv_rows(tsv_path: str) -> int:
 
 
 def count_formatted(dataset_name: str) -> int:
-    """Count rows in the formatted TSV (LMUData_formated/) for this dataset."""
+    """Count rows in the formatted TSV (LMUData_formatted/) for this dataset."""
     for candidate in (dataset_name + ".tsv", dataset_name + "_TH.tsv"):
         p = os.path.join(LMUDATA_FMT, candidate)
         if os.path.isfile(p):
